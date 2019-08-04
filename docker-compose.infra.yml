@@ -1,0 +1,205 @@
+version: '3.7'
+services:
+  traefik:
+    image: traefik
+    networks:
+      - proxy
+    ports:
+      - "80:80"
+      - "443:443"
+      - target: 8080
+        published: 8080
+        protocol: tcp
+        mode: ingress
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./certs/:/certs/"
+    deploy:
+      # Deploy the service to all nodes that match our constraints
+      mode: global
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==manager"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:traefik.${HOST_DOMAIN}"
+      - "traefik.port=8080"
+      - "traefik.backend=traefik"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+    configs:
+      - source: traefik_config
+        target: /traefik.toml
+
+  consul:
+    image: consul:1.5.3
+    command: "consul agent -server -bind=${HOST_IP} -client=0.0.0.0 -ui -bootstrap-expect=1 -recursor=8.8.8.8 -node=master -data-dir=/consul/data"
+    volumes:
+      - consul-data:/consul/data
+    environment:
+      - "CONSUL_ALLOW_PRIVILEGED_PORTS="
+      - 'CONSUL_LOCAL_CONFIG={"leave_on_terminate": true, "datacenter": "infra"}'
+    ports: 
+      - "8600:8600/udp"
+    networks:
+      - proxy
+    deploy:
+      mode: global
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:consul.${HOST_DOMAIN}"
+      - "traefik.port=8500"
+      - "traefik.backend=consul"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+      - traefik.tags=${TRAEFIK_PUBLIC_TAG}
+
+  consul_replica:
+    image: consul:1.5.3
+    command: "consul agent -server -bind=${HOST_IP} -client=0.0.0.0 -retry-join=consul -data-dir=/consul/data"
+    volumes:
+      - consul-data-replica:/consul/data
+    environment:
+      - 'CONSUL_LOCAL_CONFIG={"leave_on_terminate": true}'
+    networks:
+      - proxy 
+    depends_on:
+      - consul
+    deploy:
+      replicas: ${CONSUL_REPLICAS:-3}
+      placement:
+        preferences:
+          - spread: node.id
+    labels:
+      - "traefik.enable=false"
+
+  registrator:
+    networks:
+      - proxy
+    depends_on:
+      - consul
+    image: gliderlabs/registrator
+    command: -internal consul://consul:8500
+    volumes:
+      - "/var/run/docker.sock:/tmp/docker.sock"
+    labels:
+      - "traefik.enable=false"
+
+  agent:
+    image: portainer/agent
+    environment:
+      # REQUIRED: Should be equal to the service name prefixed by "tasks." when
+      # deployed inside an overlay network
+      AGENT_CLUSTER_ADDR: tasks.agent
+      # AGENT_PORT: 9001
+      # LOG_LEVEL: debug
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - agent_network
+    deploy:
+      mode: global
+    labels:
+      - "traefik.enable=false"
+
+  portainer:
+    image: portainer/portainer
+    command: -H tcp://tasks.agent:9001 --tlsskipverify
+    volumes:
+      - portainer_data:/data
+    networks:
+      - agent_network
+      - proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:portainer.${HOST_DOMAIN}"
+      - "traefik.port=9000"
+      - "traefik.backend=portainer"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+    deploy:
+      mode: global
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          - "node.role==manager"
+
+  prometheus:
+    image: prom/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - "./prometheus/:/etc/prometheus/"
+      - "prometheus-data:/prometheus"
+    networks:
+      - proxy
+    deploy:
+      mode: global
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          memory: 2048M
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:prometheus.${HOST_DOMAIN}"
+      - "traefik.port=9090"
+      - "traefik.backend=prometheus"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+
+  grafana:
+    image: grafana/grafana:6.2.5
+    depends_on:
+      - prometheus
+    volumes:
+      - "grafana-data:/var/lib/grafana"
+      - ./grafana/provisioning/:/etc/grafana/provisioning/
+    environment:
+      - "GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL}"
+      - "GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}"
+      - "GF_USERS_ALLOW_SIGN_UP=${GF_USERS_ALLOW_SIGN_UP}"
+      - "GF_INSTALL_PLUGINS=${GF_INSTALL_PLUGINS}"
+    networks:
+      - proxy
+    # user: "472" # Grafana container using bind mounts
+    deploy:     
+      placement:
+        constraints:
+          - node.role == manager
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:grafana.${HOST_DOMAIN}"
+      - "traefik.port=3000"
+      - "traefik.backend=grafana"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+
+configs:
+  traefik_config:
+    file: ./traefik/conf/traefik.toml
+
+networks:
+  agent_network:
+    driver: overlay
+  proxy:
+    name: proxy
+    driver: overlay
+    attachable: true
+volumes:
+  portainer_data: {}
+  consul-data: {}
+  consul-data-replica: {}
+  prometheus-data: {}
+  grafana-data: {}

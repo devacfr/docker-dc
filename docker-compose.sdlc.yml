@@ -1,0 +1,142 @@
+version: '3.7'
+services:
+
+  ttyd:
+    image: tsl0922/ttyd
+    deploy:
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:ttyd.${HOST_DOMAIN}"
+      - "traefik.port=7681"
+      - "traefik.backend=ttyd"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+    networks:
+      - proxy
+
+  gitlab-redis:
+    image: sameersbn/redis:4.0.9-2
+    command: --loglevel warning
+    networks:
+      - gitlab
+      - proxy
+    volumes:
+      - redis-data:/var/lib/redis
+    deploy:
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=false"
+  
+  gitlab-postgresql:
+    image: sameersbn/postgresql:10-2
+    networks:
+      - gitlab
+      - proxy
+    volumes:
+      - postgresql-data:/var/lib/postgresql
+    environment:
+      - "DB_USER=${DB_USER}"
+      - "DB_PASS=${DB_PASS}"
+      - "DB_NAME=${DB_NAME}"
+      - "DB_EXTENSION=pg_trgm"
+    deploy:
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=false"
+
+  registry:
+    image: registry:latest
+    networks:
+      - proxy
+      - gitlab
+    volumes:
+      - registry-data:/registry
+      - "./certs/:/certs/"
+    environment:
+      - "REGISTRY_LOG_LEVEL=info"
+      - "REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/registry"
+      - "REGISTRY_AUTH_TOKEN_REALM=${REGISTRY_AUTH_TOKEN_REALM}"
+      - "REGISTRY_AUTH_TOKEN_SERVICE=container_registry"
+      - "REGISTRY_AUTH_TOKEN_ISSUER=gitlab-issuer"
+      - REGISTRY_AUTH_TOKEN_ROOTCERTBUNDLE=/certs/server.cer
+      - "REGISTRY_STORAGE_DELETE_ENABLED=true"
+      # This fixes a bug associated with registry authentication
+      - "REGISTRY_AUTH_TOKEN_AUTOREDIRECT=false"
+    deploy:
+      restart_policy:
+        condition: on-failure
+    labels:
+      # Change this to your domain
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:registry.${HOST_DOMAIN}"
+      - "traefik.port=5000"
+      - "traefik.backend=registry"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+
+  gitlab:
+    image: sameersbn/gitlab:12.0.3
+    depends_on:
+      - redis
+      - postgresql
+    networks:
+      - gitlab
+      - proxy
+    ports: 
+      - "22:22"
+    volumes:
+      - gitlab-data:/home/git/data
+      - "./certs/:/certs/"
+    environment:
+      - "DEBUG=false"
+      - "GITLAB_SSH_PORT=22"
+      - "DB_ADAPTER=postgresql"
+      - "DB_HOST=gitlab-postgresql"
+      - "DB_PORT=5432"
+      - "DB_USER=${DB_USER}"
+      - "DB_PASS=${DB_PASS}"
+      - "DB_NAME=${DB_NAME}"
+      - "REDIS_HOST=gitlab-redis"
+      - "REDIS_PORT=6379"
+      - "GITLAB_HTTPS=false"
+      - "GITLAB_HOST=${GITLAB_HOST}"
+      - "GITLAB_SECRETS_DB_KEY_BASE=${GITLAB_SECRETS_DB_KEY_BASE}"
+      - "GITLAB_SECRETS_SECRET_KEY_BASE=${GITLAB_SECRETS_SECRET_KEY_BASE}"
+      - "GITLAB_SECRETS_OTP_KEY_BASE=${GITLAB_SECRETS_OTP_KEY_BASE}"
+
+      - "GITLAB_REGISTRY_ENABLED=true"
+      - "GITLAB_REGISTRY_HOST=${GITLAB_REGISTRY_HOST}"
+      - "GITLAB_REGISTRY_PORT=443"
+      - "GITLAB_REGISTRY_API_URL=http://registry:5000"
+      - GITLAB_REGISTRY_KEY_PATH=/certs/server.key
+
+      - "GITLAB_NOTIFY_ON_BROKEN_BUILDS=true"
+      - "GITLAB_NOTIFY_PUSHER=false"
+      - "GITLAB_BACKUP_SCHEDULE=daily"
+      - "GITLAB_BACKUP_TIME=01:00"
+    deploy:
+      restart_policy:
+        condition: on-failure
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:gitlab.${HOST_DOMAIN}"
+      - "traefik.port=80"
+      - "traefik.backend=gitlab"
+      - "traefik.network=proxy"
+      - "traefik.frontend.entryPoints=http,https"
+
+
+networks:
+  proxy:
+    external: 
+      name: proxy
+  gitlab: {}
+volumes:
+  redis-data: {}
+  postgresql-data: {}
+  registry-data: {}
+  gitlab-data: {}
