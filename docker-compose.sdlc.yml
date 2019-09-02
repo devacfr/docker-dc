@@ -38,9 +38,9 @@ services:
     volumes:
       - postgresql-data:/var/lib/postgresql
     environment:
-      - "DB_USER=${DB_USER}"
-      - "DB_PASS=${DB_PASS}"
-      - "DB_NAME=${DB_NAME}"
+      - "DB_USER=${GITLAB_DB_USER}"
+      - "DB_PASS=${GITLAB_DB_PASS}"
+      - "DB_NAME=${GITLAB_DB_NAME}"
       - "DB_EXTENSION=pg_trgm"
     deploy:
       restart_policy:
@@ -97,9 +97,9 @@ services:
       - "DB_ADAPTER=postgresql"
       - "DB_HOST=gitlab-postgresql"
       - "DB_PORT=5432"
-      - "DB_USER=${DB_USER}"
-      - "DB_PASS=${DB_PASS}"
-      - "DB_NAME=${DB_NAME}"
+      - "DB_USER=${GITLAB_DB_USER}"
+      - "DB_PASS=${GITLAB_DB_PASS}"
+      - "DB_NAME=${GITLAB_DB_NAME}"
       - "REDIS_HOST=gitlab-redis"
       - "REDIS_PORT=6379"
       - "GITLAB_HTTPS=false"

@@ -25,9 +25,9 @@ export REGISTRY_AUTH_TOKEN_REALM="https://gitlab.docker/jwt/auth"
 export GITLAB_REGISTRY_HOST="registry.docker"
 
 # Database settings, change at least the password
-export DB_USER="gitlab"
-export DB_PASS="password"
-export DB_NAME="gitlabhq_production"
+export GITLAB_DB_USER="gitlab"
+export GITLAB_DB_PASS="password"
+export GITLAB_DB_NAME="gitlabhq_production"
 
 # URL to GitLab, change this to your domain
 export GITLAB_HOST="gitlab.docker"
@@ -44,7 +44,7 @@ export GITLAB_INCOMING_EMAIL_ADDRESS="devacfr@mac.com"
 
 # GitLab email authentication
 # Here's an example of using Gmail authentication
-export SMTP_ENABLED="false"
+export GITLAB_SMTP_ENABLED="false"
 
 ######################################################################
 # GRAFANA
