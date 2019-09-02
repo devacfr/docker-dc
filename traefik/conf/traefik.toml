@@ -18,8 +18,7 @@ entryPoint = "traefik"
 dashboard = true
 
 [docker]
-# endpoint = "tcp://localhost:1234"
-endpoint = "unix:///var/run/docker.sock"
+endpoint = "tcp://socat:2375"
 domain = "docker"
 swarmMode = false
 watch = true
