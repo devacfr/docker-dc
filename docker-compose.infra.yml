@@ -100,7 +100,7 @@ services:
     labels:
       - "traefik.enable=false"
 
-  agent:
+  portainer-agent:
     image: portainer/agent
     environment:
       # REQUIRED: Should be equal to the service name prefixed by "tasks." when
@@ -111,7 +111,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      - agent_network
+      - portainer-agent_network
     deploy:
       mode: global
     labels:
@@ -123,7 +123,7 @@ services:
     volumes:
       - portainer_data:/data
     networks:
-      - agent_network
+      - portainer-agent_network
       - proxy
     labels:
       - "traefik.enable=true"
@@ -176,7 +176,7 @@ services:
       - prometheus
     volumes:
       - "grafana-data:/var/lib/grafana"
-      - ./grafana/provisioning/:/etc/grafana/provisioning/
+      - ${PWD}/grafana/provisioning/:/etc/grafana/provisioning/
     environment:
       - "GF_SERVER_ROOT_URL=${GF_SERVER_ROOT_URL}"
       - "GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}"
@@ -204,7 +204,7 @@ configs:
     file: ./traefik/conf/traefik.toml
 
 networks:
-  agent_network:
+  portainer-agent_network:
     driver: overlay
   proxy:
     name: proxy
