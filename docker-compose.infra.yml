@@ -101,9 +101,6 @@ services:
         published: 80
       - target: 443
         published: 443
-      - target: 8080
-        published: 8080
-        mode: ingress
     volumes:
       - "treafik_data:/tmp"
       - "./certs/:/certs/"
