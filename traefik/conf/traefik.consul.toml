@@ -1,17 +1,17 @@
 logLevel = "INFO"
 
-defaultEntryPoints = ["http", "https"]
+defaultEntryPoints = ["https", "http"]
 [entryPoints]
   [entryPoints.http]
-    address = ":80"
+  address = ":80"
     [entryPoints.http.redirect]
     entryPoint = "https"
   [entryPoints.https]
-    address = ":443"
-      [entryPoints.https.tls]
+  address = ":443"
+    [entryPoints.https.tls]
       [entryPoints.https.tls.defaultCertificate]
-          certFile = "/certs/server.cer"
-          keyFile = "/certs/server.key"
+        certFile = "/certs/server.cer"
+        keyFile = "/certs/server.key"
 
 [api]
 entryPoint = "traefik"
@@ -20,7 +20,7 @@ dashboard = true
 [docker]
 endpoint = "tcp://socat:2375"
 domain = "docker"
-swarmMode = true
+swarmMode = false
 watch = true
 exposedByDefault = false
 network = "discovery"
@@ -31,6 +31,11 @@ endpoint = "consul:8500"
 watch = true
 prefix = "traefik"
 
+[consulCatalog]
+endpoint = "consul:8500"
+domain = "consul.docker"
+prefix = "traefik"
+exposedByDefault = true
 
 [metrics]
   [metrics.prometheus]

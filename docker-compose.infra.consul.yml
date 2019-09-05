@@ -1,0 +1,59 @@
+version: '3.7'
+services:
+  consul:
+    image: consul:1.5.3
+    command: "consul agent -server -bind=${HOST_IP} -client=0.0.0.0 -ui -bootstrap-expect=1 -recursor=8.8.8.8 -node=master -data-dir=/consul/data"
+    volumes:
+      - consul-data:/consul/data
+    environment:
+      - "CONSUL_ALLOW_PRIVILEGED_PORTS="
+      - 'CONSUL_LOCAL_CONFIG={"leave_on_terminate": true, "datacenter": "infra"}'
+    ports: 
+      - "8600:8600/udp"
+    networks:
+      - discovery
+    deploy:
+      mode: global
+    labels:
+      - "traefik.enable=true"
+      - "traefik.frontend.rule=Host:consul.${HOST_DOMAIN}"
+      - "traefik.port=8500"
+      - "traefik.backend=consul"
+      - "traefik.network=discovery"
+      - "traefik.frontend.entryPoints=http,https"
+      - "traefik.tags=${TRAEFIK_PUBLIC_TAG}"
+
+  consul_replica:
+    image: consul:1.5.3
+    command: "consul agent -server -bind=${HOST_IP} -client=0.0.0.0 -retry-join=consul -data-dir=/consul/data"
+    volumes:
+      - consul-data-replica:/consul/data
+    environment:
+      - 'CONSUL_LOCAL_CONFIG={"leave_on_terminate": true}'
+    networks:
+      - discovery 
+    depends_on:
+      - consul
+    deploy:
+      replicas: ${CONSUL_REPLICAS:-3}
+      placement:
+        preferences:
+          - spread: node.id
+    labels:
+      - "traefik.enable=false"
+
+  registrator:
+    networks:
+      - discovery
+    depends_on:
+      - consul
+    image: gliderlabs/registrator
+    command: -internal consul://consul:8500
+    volumes:
+      - "/var/run/docker.sock:/tmp/docker.sock"
+    labels:
+      - "traefik.enable=false"
+
+volumes:
+  consul-data: {}
+  consul-data-replica: {}

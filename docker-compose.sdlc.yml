@@ -6,22 +6,20 @@ services:
     deploy:
       restart_policy:
         condition: on-failure
-    labels:
-      - "traefik.enable=true"
-      - "traefik.frontend.rule=Host:ttyd.${HOST_DOMAIN}"
-      - "traefik.port=7681"
-      - "traefik.backend=ttyd"
-      - "traefik.network=proxy"
-      - "traefik.frontend.entryPoints=http,https"
+      labels:
+        - "traefik.enable=true"
+        - "traefik.frontend.rule=Host:ttyd.${HOST_DOMAIN}"
+        - "traefik.port=7681"
+        - "traefik.backend=ttyd"
     networks:
-      - proxy
+      - discovery
 
   gitlab-redis:
     image: sameersbn/redis:4.0.9-2
     command: --loglevel warning
     networks:
       - gitlab
-      - proxy
+      - discovery
     volumes:
       - redis-data:/var/lib/redis
     deploy:
@@ -34,7 +32,7 @@ services:
     image: sameersbn/postgresql:10-2
     networks:
       - gitlab
-      - proxy
+      - discovery
     volumes:
       - postgresql-data:/var/lib/postgresql
     environment:
@@ -45,16 +43,16 @@ services:
     deploy:
       restart_policy:
         condition: on-failure
-    labels:
-      - "traefik.enable=false"
+      labels:
+        - "traefik.enable=false"
 
   registry:
     image: registry:latest
     networks:
-      - proxy
+      - discovery
       - gitlab
     volumes:
-      - registry-data:/registry
+      - "registry-data:/var/lib/registry"
       - "./certs/:/certs/"
     environment:
       - "REGISTRY_LOG_LEVEL=info"
@@ -69,27 +67,26 @@ services:
     deploy:
       restart_policy:
         condition: on-failure
-    labels:
-      # Change this to your domain
-      - "traefik.enable=true"
-      - "traefik.frontend.rule=Host:registry.${HOST_DOMAIN}"
-      - "traefik.port=5000"
-      - "traefik.backend=registry"
-      - "traefik.network=proxy"
-      - "traefik.frontend.entryPoints=http,https"
+      labels:
+        # Change this to your domain
+        - "traefik.enable=true"
+        - "traefik.frontend.rule=Host:${REGISTRY_HOST}"
+        - "traefik.port=5000"
+        - "traefik.backend=registry"
 
   gitlab:
-    image: sameersbn/gitlab:12.0.3
+    image: sameersbn/gitlab:12.2.1-1
     depends_on:
       - redis
       - postgresql
     networks:
       - gitlab
-      - proxy
+      - discovery
     ports: 
       - "22:22"
     volumes:
-      - gitlab-data:/home/git/data
+      - "gitlab-data:/home/git/data:Z"
+      - "gitlab-log:/var/log/gitlab"
       - "./certs/:/certs/"
     environment:
       - "DEBUG=false"
@@ -102,17 +99,21 @@ services:
       - "DB_NAME=${GITLAB_DB_NAME}"
       - "REDIS_HOST=gitlab-redis"
       - "REDIS_PORT=6379"
-      - "GITLAB_HTTPS=false"
+      - "GITLAB_HTTPS=true"
       - "GITLAB_HOST=${GITLAB_HOST}"
+      - "GITLAB_RELATIVE_URL_ROOT="
       - "GITLAB_SECRETS_DB_KEY_BASE=${GITLAB_SECRETS_DB_KEY_BASE}"
       - "GITLAB_SECRETS_SECRET_KEY_BASE=${GITLAB_SECRETS_SECRET_KEY_BASE}"
       - "GITLAB_SECRETS_OTP_KEY_BASE=${GITLAB_SECRETS_OTP_KEY_BASE}"
 
       - "GITLAB_REGISTRY_ENABLED=true"
-      - "GITLAB_REGISTRY_HOST=${GITLAB_REGISTRY_HOST}"
+      - "GITLAB_REGISTRY_HOST=${REGISTRY_HOST}"
       - "GITLAB_REGISTRY_PORT=443"
       - "GITLAB_REGISTRY_API_URL=http://registry:5000"
-      - GITLAB_REGISTRY_KEY_PATH=/certs/server.key
+      - "GITLAB_REGISTRY_KEY_PATH=/certs/server.key"
+
+      - "GITLAB_ROOT_PASSWORD="
+      - "GITLAB_ROOT_EMAIL="
 
       - "GITLAB_NOTIFY_ON_BROKEN_BUILDS=true"
       - "GITLAB_NOTIFY_PUSHER=false"
@@ -121,22 +122,20 @@ services:
     deploy:
       restart_policy:
         condition: on-failure
-    labels:
-      - "traefik.enable=true"
-      - "traefik.frontend.rule=Host:gitlab.${HOST_DOMAIN}"
-      - "traefik.port=80"
-      - "traefik.backend=gitlab"
-      - "traefik.network=proxy"
-      - "traefik.frontend.entryPoints=http,https"
-
+      labels:
+        - "traefik.enable=true"
+        - "traefik.frontend.rule=Host:${GITLAB_HOST}"
+        - "traefik.port=80"
+        - "traefik.backend=gitlab"
 
 networks:
-  proxy:
+  discovery:
     external: 
-      name: proxy
+      name: discovery
   gitlab: {}
 volumes:
   redis-data: {}
   postgresql-data: {}
   registry-data: {}
   gitlab-data: {}
+  gitlab-log: {}
